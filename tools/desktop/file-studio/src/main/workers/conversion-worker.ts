@@ -1,6 +1,7 @@
 import { parentPort } from 'node:worker_threads'
 import { errorMessage } from '../../core/errors'
 import { htmlToCsv, htmlToExcel } from '../../core/conversion/html'
+import { structuredTextToCsv } from '../../core/conversion/structured'
 import { readImageInfo, renderImage, replaceRegion, type ImageRenderOptions } from '../../core/image/process'
 import { recognizeImage } from '../../core/image/ocr'
 import * as pdf from '../../core/pdf/engine'
@@ -32,6 +33,14 @@ async function dispatch(type: string, payload: Record<string, unknown>): Promise
     case 'html-csv':
       return htmlToCsv.convert(String(payload.html ?? ''), {
         includeHidden: Boolean(payload.includeHidden),
+        delimiter: payload.delimiter === ';' || payload.delimiter === '\t' ? payload.delimiter : ',',
+        bom: payload.bom !== false
+      })
+    case 'structured-csv':
+      return structuredTextToCsv(String(payload.text ?? new TextDecoder().decode(bytes)), {
+        fileName: String(payload.fileName ?? 'data.json'),
+        recordPath: payload.recordPath ? String(payload.recordPath) : undefined,
+        expandPath: payload.expandPath ? String(payload.expandPath) : null,
         delimiter: payload.delimiter === ';' || payload.delimiter === '\t' ? payload.delimiter : ',',
         bom: payload.bom !== false
       })
@@ -96,6 +105,32 @@ async function pdfDispatch(op: string, bytes: Uint8Array, payload: Record<string
       return pdf.addHighlightAnnotation(bytes, page, payload.rect as pdf.PdfRect)
     case 'ink':
       return pdf.addInkAnnotation(bytes, page, (payload.points as Array<[number, number]>) ?? [])
+    case 'underline':
+      return pdf.addUnderlineAnnotation(bytes, page, payload.rect as pdf.PdfRect)
+    case 'strike':
+      return pdf.addStrikeOutAnnotation(bytes, page, payload.rect as pdf.PdfRect)
+    case 'circle':
+      return pdf.addCircleAnnotation(bytes, page, payload.rect as pdf.PdfRect)
+    case 'line':
+      return pdf.addLineAnnotation(
+        bytes,
+        page,
+        (payload.from as { x: number; y: number }) ?? { x: 72, y: 700 },
+        (payload.to as { x: number; y: number }) ?? { x: 220, y: 700 },
+        payload.arrow !== false
+      )
+    case 'stamp':
+      return pdf.addStampAnnotation(bytes, page, payload.rect as pdf.PdfRect, String(payload.name ?? 'Approved'))
+    case 'image':
+      return pdf.addImage(bytes, page, toBytes(payload.image), payload.rect as pdf.PdfRect)
+    case 'remove-annot':
+      return pdf.removeAnnotation(bytes, page, Number(payload.index ?? 0))
+    case 'blank-doc':
+      return pdf.createBlankPdf()
+    case 'ocr-layer':
+      return pdf.addInvisibleTextLayer(bytes, page, (payload.words as pdf.PagePlacement[]) ?? [])
+    case 'split':
+      return pdf.splitPdf(bytes)
     case 'annots':
       return pdf.annotationSubtypes(bytes, page)
     case 'fields':

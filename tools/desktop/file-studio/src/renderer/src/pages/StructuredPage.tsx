@@ -1,12 +1,14 @@
 import Editor from '@monaco-editor/react'
-import { useMemo, useState } from 'react'
-import { formatJson, minifyJson, parseStructuredText, treeToValue, valueToTree, type TreeNode } from '@core/json/document'
-import { applyMapping, arrayKeys, listRecordPaths, suggestMapping, type RecordMapping } from '@core/mapping/map-records'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { addChild, formatJson, minifyJson, parseStructuredText, removeNode, renameKey, treeToValue, valueToTree, type TreeNode } from '@core/json/document'
+import { applyMapping, arrayKeys, listRecordPaths, suggestMapping, upsertTemplate, writeMappedCell, type RecordMapping } from '@core/mapping/map-records'
+import { matrixToCsv } from '@core/csv/csv'
 import { queryJsonPath, queryXPath } from '@core/query/query'
 import { rowsToXlsx } from '@core/spreadsheet/excel'
 import { formatXml, jsonToXml, minifyXml, parseXml, xmlToJson } from '@core/xml/document'
 import { DataGrid } from '@renderer/components/DataGrid'
 import { Button } from '@renderer/components/ui'
+import { registerCommand } from '@renderer/lib/commands'
 import { exportBytes } from '@renderer/lib/session'
 import { useSettings } from '@renderer/stores/settings'
 import { activeTab, useWorkspace } from '@renderer/stores/workspace'
@@ -15,17 +17,46 @@ import { toast } from 'sonner'
 export function StructuredPage() {
   const tab = useWorkspace(activeTab)
   const updateTab = useWorkspace((state) => state.updateTab)
-  const indent = useSettings((state) => state.settings.jsonIndent)
+  const editTab = useWorkspace((state) => state.editTab)
+  const settings = useSettings((state) => state.settings)
+  const updateSettings = useSettings((state) => state.update)
+  const indent = settings.jsonIndent
   const [path, setPath] = useState('$.')
   const [hits, setHits] = useState<string[]>([])
   const [mapping, setMapping] = useState<RecordMapping | null>(null)
+  const [templateName, setTemplateName] = useState('')
+  const queryRef = useRef<HTMLInputElement>(null)
   const text = tab?.text ?? ''
   const format = tab?.format ?? 'json'
   const parsed = useMemo(() => (format === 'xml' ? null : parseStructuredText(text, format === 'jsonl' ? 'data.jsonl' : 'data.json')), [text, format])
   const xml = useMemo(() => (format === 'xml' ? parseXml(text) : null), [text, format])
   const tree = useMemo(() => (parsed?.ok ? valueToTree(parsed.value) : null), [parsed])
   const paths = useMemo(() => (parsed?.ok ? listRecordPaths(parsed.value) : []), [parsed])
-  const table = useMemo(() => (parsed?.ok && mapping ? applyMapping(parsed.value, mapping) : null), [parsed, mapping])
+  const table = useMemo(() => {
+    if (!parsed?.ok || !mapping) return null
+    try {
+      return applyMapping(parsed.value, mapping)
+    } catch {
+      return null
+    }
+  }, [parsed, mapping])
+
+  useEffect(() => {
+    const stopFind = registerCommand('find', () => {
+      if (!queryRef.current) return false
+      queryRef.current.focus()
+      return true
+    })
+    const stopExport = registerCommand('export', () => {
+      if (!table) return false
+      void rowsToXlsx(table.headers, table.rows).then((bytes) => exportBytes('mapped.xlsx', bytes))
+      return true
+    })
+    return () => {
+      stopFind()
+      stopExport()
+    }
+  }, [table])
 
   if (!tab || tab.module !== 'structured') return <PasteStructured />
 
@@ -51,7 +82,7 @@ export function StructuredPage() {
         >
           {format === 'xml' ? 'To JSON' : 'To XML'}
         </Button>
-        <input className="w-64 rounded border px-2 py-1 text-sm" value={path} onChange={(event) => setPath(event.target.value)} />
+        <input ref={queryRef} className="w-64 rounded border px-2 py-1 text-sm" value={path} onChange={(event) => setPath(event.target.value)} />
         <Button
           onClick={() => {
             try {
@@ -110,6 +141,48 @@ export function StructuredPage() {
         >
           Excel from mapping
         </Button>
+        <Button
+          disabled={!table}
+          onClick={() => {
+            if (!table) return
+            const csv = matrixToCsv(table.headers, table.rows, { delimiter: settings.csvDelimiter, bom: settings.csvBom, newline: settings.csvNewline })
+            void exportBytes('mapped.csv', new TextEncoder().encode(csv))
+          }}
+        >
+          CSV from mapping
+        </Button>
+        <input className="w-36 rounded border px-2 py-1 text-sm" placeholder="Template name" value={templateName} onChange={(event) => setTemplateName(event.target.value)} />
+        <Button
+          disabled={!mapping}
+          onClick={() => {
+            if (!mapping) return
+            try {
+              void updateSettings({ mappingTemplates: upsertTemplate(settings.mappingTemplates ?? [], templateName, mapping) })
+              toast.success('Template saved on this computer')
+            } catch (error) {
+              toast.error(error instanceof Error ? error.message : 'Could not save the template')
+            }
+          }}
+        >
+          Save template
+        </Button>
+        <select
+          className="rounded border px-2 py-1 text-sm"
+          value=""
+          onChange={(event) => {
+            const saved = (settings.mappingTemplates ?? []).find((item) => item.id === event.target.value)
+            if (!saved) return
+            setMapping({ recordPath: saved.recordPath, expandPath: saved.expandPath, columns: saved.columns.map((column) => ({ ...column })) })
+            setTemplateName(saved.name)
+          }}
+        >
+          <option value="">Saved templates</option>
+          {(settings.mappingTemplates ?? []).map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.name}
+            </option>
+          ))}
+        </select>
       </div>
       <div className="grid min-h-0 grid-cols-2">
         {large ? (
@@ -127,7 +200,12 @@ export function StructuredPage() {
           <p className="mb-2 text-xs text-black/60">
             Source edits win when they parse. Tree edits rewrite the source. An invalid source leaves this tree on the last good value.
           </p>
-          {tree && <TreeView node={tree} onChange={(next) => updateTab(tab.id, { text: JSON.stringify(treeToValue(next), null, indent), dirty: true, format: 'json' })} />}
+          {tree && (
+            <TreeView
+              node={tree}
+              onChange={(next) => editTab(tab.id, { text: JSON.stringify(treeToValue(next), null, indent), dirty: true, format: 'json' })}
+            />
+          )}
           {xml && !xml.ok && <p className="text-red-700">{xml.diagnostics[0]?.message}</p>}
           {hits.length > 0 && (
             <ul className="mt-3 space-y-1">
@@ -139,7 +217,52 @@ export function StructuredPage() {
         </div>
       </div>
       <div className="min-h-0 border-t border-[var(--color-line)]">
-        {table ? <DataGrid headers={table.headers} rows={table.rows} /> : <p className="p-3 text-sm">Choose a record path to preview rows. One array can be expanded. A second array is written as JSON so it does not multiply rows.</p>}
+        {table && mapping ? (
+          <div className="grid h-full grid-rows-[auto_1fr]">
+            <div className="flex gap-3 overflow-auto px-3 py-1 text-xs">
+              {mapping.columns.map((column, index) => (
+                <label key={`${column.sourcePath}-${index}`} className="flex items-center gap-1">
+                  <input
+                    type="checkbox"
+                    checked={column.include}
+                    onChange={(event) =>
+                      setMapping({
+                        ...mapping,
+                        columns: mapping.columns.map((item, itemIndex) => (itemIndex === index ? { ...item, include: event.target.checked } : item))
+                      })
+                    }
+                  />
+                  <span>{column.sourcePath}</span>
+                  <input
+                    className="w-24 rounded border px-1"
+                    value={column.outputColumn}
+                    onChange={(event) =>
+                      setMapping({
+                        ...mapping,
+                        columns: mapping.columns.map((item, itemIndex) => (itemIndex === index ? { ...item, outputColumn: event.target.value } : item))
+                      })
+                    }
+                  />
+                </label>
+              ))}
+            </div>
+            <DataGrid
+              headers={table.headers}
+              rows={table.rows}
+              onEdit={(row, column, value) => {
+                if (!parsed?.ok) return
+                try {
+                  const next = writeMappedCell(parsed.value, mapping, row, column, value)
+                  editTab(tab.id, { text: JSON.stringify(next, null, indent), dirty: true, format: 'json' })
+                } catch (error) {
+                  toast.error(error instanceof Error ? error.message : 'That cell could not be written')
+                }
+              }}
+            />
+          </div>
+        ) : (
+          <p className="p-3 text-sm">Choose a record path to preview rows. One array can be expanded. A second array is written as JSON so it does not multiply rows.</p>
+        )}
       </div>
     </div>
   )
@@ -161,12 +284,55 @@ function TreeView({ node, onChange }: { node: TreeNode; onChange: (node: TreeNod
             onChange={(event) => onChange({ ...node, value: event.target.value })}
           />
         )}
+        {node.key != null && (
+          <button
+            className="ml-2 text-xs underline"
+            onClick={() => {
+              const name = window.prompt('Property name', node.key ?? '')
+              if (!name) return
+              try {
+                onChange(renameKey(node, node.id, name))
+              } catch (error) {
+                toast.error(error instanceof Error ? error.message : 'Could not rename')
+              }
+            }}
+          >
+            Rename
+          </button>
+        )}
+        {(node.type === 'object' || node.type === 'array') && (
+          <button
+            className="ml-2 text-xs underline"
+            onClick={() => {
+              try {
+                onChange(addChild(node, node.id, 'field', ''))
+              } catch (error) {
+                toast.error(error instanceof Error ? error.message : 'Could not add a child')
+              }
+            }}
+          >
+            Add
+          </button>
+        )}
         {node.children.map((child) => (
-          <TreeView
-            key={child.id}
-            node={child}
-            onChange={(next) => onChange({ ...node, children: node.children.map((item) => (item.id === child.id ? next : item)) })}
-          />
+          <span key={child.id}>
+            <button
+              className="ml-2 text-xs text-red-800"
+              onClick={() => {
+                try {
+                  onChange(removeNode(node, child.id))
+                } catch (error) {
+                  toast.error(error instanceof Error ? error.message : 'Could not delete')
+                }
+              }}
+            >
+              Delete {child.key ?? child.type}
+            </button>
+            <TreeView
+              node={child}
+              onChange={(next) => onChange({ ...node, children: node.children.map((item) => (item.id === child.id ? next : item)) })}
+            />
+          </span>
         ))}
       </li>
     </ul>

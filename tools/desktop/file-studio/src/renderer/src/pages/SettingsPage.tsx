@@ -51,7 +51,7 @@ export function SettingsPage() {
       </label>
       <label className="flex items-center gap-2">
         <input type="checkbox" checked={settings.autosave} onChange={(event) => void update({ autosave: event.target.checked })} />
-        Keep recovery copies of projects in the app data folder
+        Keep recovery copies of unsaved HTML, JSON, XML, and image projects. PDFs are not copied. Originals stay unchanged.
       </label>
     </form>
   )

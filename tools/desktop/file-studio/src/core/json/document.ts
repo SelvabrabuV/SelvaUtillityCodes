@@ -133,6 +133,64 @@ export function updateTree(root: TreeNode, id: string, recipe: (node: TreeNode) 
   return mapTree(structuredClone(root), id, recipe)
 }
 
+export function addChild(root: TreeNode, parentId: string, key: string, value: unknown): TreeNode {
+  let found = false
+  const next = updateTree(root, parentId, (node) => {
+    found = true
+    if (node.type !== 'object' && node.type !== 'array') throw new Error('Only objects and arrays can gain a child.')
+    const childKey = node.type === 'array' ? String(node.children.length) : uniqueKey(node, key || 'field')
+    const path = node.type === 'array' ? `${node.path}[${node.children.length}]` : joinPath(node.path, childKey)
+    return { ...node, children: [...node.children, valueToTree(value, childKey, path)] }
+  })
+  if (!found) throw new Error('That node was not found.')
+  return next
+}
+
+export function renameKey(root: TreeNode, id: string, key: string): TreeNode {
+  const trimmed = key.trim()
+  if (!trimmed) throw new Error('A property name is required.')
+  let found = false
+  const next = updateTree(root, id, (node) => {
+    found = true
+    if (node.key == null) throw new Error('The document root has no property name.')
+    return { ...node, key: trimmed }
+  })
+  if (!found) throw new Error('That node was not found.')
+  return next
+}
+
+export function removeNode(root: TreeNode, id: string): TreeNode {
+  if (root.id === id) throw new Error('The document root cannot be deleted.')
+  let found = false
+  const next = structuredClone(root)
+  strip(next)
+  if (!found) throw new Error('That node was not found.')
+  return next
+
+  function strip(node: TreeNode): void {
+    node.children = node.children.filter((child) => {
+      if (child.id === id) {
+        found = true
+        return false
+      }
+      return true
+    })
+    node.children.forEach(strip)
+  }
+}
+
+function uniqueKey(node: TreeNode, key: string): string {
+  const used = new Set(node.children.map((child) => child.key))
+  if (!used.has(key)) return key
+  let index = 2
+  while (used.has(`${key}-${index}`)) index += 1
+  return `${key}-${index}`
+}
+
+function joinPath(parent: string, key: string): string {
+  return parent === '$' ? `$.${key}` : `${parent}.${key}`
+}
+
 function mapTree(node: TreeNode, id: string, recipe: (node: TreeNode) => TreeNode): TreeNode {
   if (node.id === id) return recipe(node)
   node.children = node.children.map((child) => mapTree(child, id, recipe))

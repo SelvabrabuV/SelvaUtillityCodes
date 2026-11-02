@@ -1,9 +1,11 @@
 import { FileImage, FileJson, FileSpreadsheet, FileText } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { RecentFile } from '@shared/types'
-import { openBytes, openPath } from '@renderer/lib/session'
+import { Button } from '@renderer/components/ui'
 import { asBytes } from '@renderer/lib/bytes'
+import { openBytes, openPath, openRecovery, pasteClipboard } from '@renderer/lib/session'
 import { useWorkspace, type ModuleId } from '@renderer/stores/workspace'
+import { toast } from 'sonner'
 
 const modules: Array<{ id: ModuleId; title: string; copy: string; icon: typeof FileText }> = [
   { id: 'html', title: 'HTML tables', copy: 'Turn tables into Excel or CSV without touching the source file.', icon: FileSpreadsheet },
@@ -15,8 +17,10 @@ const modules: Array<{ id: ModuleId; title: string; copy: string; icon: typeof F
 export function HomePage() {
   const setModule = useWorkspace((state) => state.setModule)
   const [recent, setRecent] = useState<RecentFile[]>([])
+  const [recoveries, setRecoveries] = useState<string[]>([])
   useEffect(() => {
     void window.studio.recent().then(setRecent)
+    void loadRecoveries().then(setRecoveries)
   }, [])
 
   return (
@@ -46,6 +50,34 @@ export function HomePage() {
           </button>
         ))}
       </div>
+      <div className="mt-8 flex gap-2">
+        <Button onClick={() => void pasteClipboard()}>Paste clipboard</Button>
+        <span className="self-center text-xs text-black/55">Ctrl+V pastes an image, HTML, or JSON. It does not write over an open file.</span>
+      </div>
+      <div className="mt-8 flex items-center gap-3">
+        <h2 className="text-sm font-semibold uppercase tracking-wide">Recovery copies</h2>
+        <Button onClick={() => void loadRecoveries().then(setRecoveries)}>Refresh</Button>
+      </div>
+      <p className="mt-1 max-w-3xl text-xs text-black/55">
+        Autosave writes JSON copies in the app recovery folder. Opening one restores a dirty tab. Your original files are not replaced.
+      </p>
+      <ul className="mt-2 max-w-3xl divide-y divide-[var(--color-line)]">
+        {recoveries.length === 0 && <li className="py-3 text-sm text-black/50">No recovery copies yet.</li>}
+        {recoveries.map((filePath) => (
+          <li key={filePath}>
+            <button
+              className="w-full py-2 text-left text-sm hover:text-[var(--color-teal)]"
+              onClick={() =>
+                void openRecovery(filePath).catch((error: unknown) => {
+                  toast.error(error instanceof Error ? error.message : 'That recovery copy could not be opened.')
+                })
+              }
+            >
+              {filePath.split(/[/\\]/).pop()}
+            </button>
+          </li>
+        ))}
+      </ul>
       <h2 className="mt-10 text-sm font-semibold uppercase tracking-wide">Recent files</h2>
       <ul className="mt-3 max-w-3xl divide-y divide-[var(--color-line)]">
         {recent.length === 0 && <li className="py-3 text-sm text-black/50">Nothing opened yet.</li>}
@@ -60,6 +92,17 @@ export function HomePage() {
       </ul>
     </div>
   )
+}
+
+async function loadRecoveries(): Promise<string[]> {
+  try {
+    const directory = await window.studio.recoveryDir()
+    const files = await window.studio.listFiles(directory)
+    return files.filter((filePath) => filePath.toLowerCase().endsWith('.recovery.json'))
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : 'Recovery copies could not be listed.')
+    return []
+  }
 }
 
 async function dropFiles(files: FileList): Promise<void> {

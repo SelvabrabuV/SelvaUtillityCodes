@@ -1,8 +1,8 @@
 import sharp from 'sharp'
-import { neutralAdjustments, type ImageAdjustments, type ImageRenderOptions } from './adjustments'
+import { clampCrop, neutralAdjustments, type ImageAdjustments, type ImageRenderOptions } from './adjustments'
 
 export type { ImageAdjustments, ImageRenderOptions }
-export { neutralAdjustments }
+export { clampCrop, neutralAdjustments }
 
 export const MAX_PIXELS = 40_000_000
 
@@ -32,12 +32,18 @@ export async function readImageInfo(input: Buffer): Promise<ImageInfo> {
   }
 }
 
-export async function renderImage(input: Buffer, options: ImageRenderOptions): Promise<{ bytes: Buffer; warning?: string }> {
+export async function renderImage(
+  input: Buffer,
+  options: ImageRenderOptions
+): Promise<{ bytes: Buffer; warning?: string; format: ImageRenderOptions['format'] }> {
   let pipeline = sharp(input, { limitInputPixels: MAX_PIXELS, animated: false, failOn: 'error' }).rotate()
   if (options.rotate) pipeline = pipeline.rotate(options.rotate)
   if (options.flipHorizontal) pipeline = pipeline.flop()
   if (options.flipVertical) pipeline = pipeline.flip()
-  if (options.crop) pipeline = pipeline.extract(options.crop)
+  if (options.crop) {
+    const sized = await pipeline.metadata()
+    pipeline = pipeline.extract(clampCrop(sized.width ?? 1, sized.height ?? 1, options.crop))
+  }
   if (options.resize?.width || options.resize?.height) {
     pipeline = pipeline.resize({
       width: options.resize.width,
@@ -63,19 +69,20 @@ export async function renderImage(input: Buffer, options: ImageRenderOptions): P
   }
   if (options.keepMetadata) pipeline = pipeline.withMetadata()
   const quality = Math.round((options.quality ?? 0.92) * 100)
-  if (options.format === 'jpeg') pipeline = pipeline.jpeg({ quality, mozjpeg: true })
-  else if (options.format === 'webp') pipeline = pipeline.webp({ quality })
-  else if (options.format === 'tiff') pipeline = pipeline.tiff()
-  else if (options.format === 'gif') pipeline = pipeline.gif()
-  else if (options.format === 'bmp') pipeline = pipeline.png().toFormat('png')
+  const written = options.format === 'bmp' ? 'png' : options.format
+  if (written === 'jpeg') pipeline = pipeline.jpeg({ quality, mozjpeg: true })
+  else if (written === 'webp') pipeline = pipeline.webp({ quality })
+  else if (written === 'tiff') pipeline = pipeline.tiff()
+  else if (written === 'gif') pipeline = pipeline.gif()
   else pipeline = pipeline.png()
   const bytes = await pipeline.toBuffer()
   const warnings = [
     options.format === 'jpeg' ? 'JPEG save is lossy. Edit from the project file to avoid recompressing the original.' : '',
     options.format === 'jpeg' || options.format === 'bmp' ? 'This format does not keep transparency.' : '',
+    options.format === 'bmp' ? 'BMP encoding is not available. The file was written as PNG.' : '',
     options.format === 'gif' ? 'GIF export is a single frame.' : ''
   ].filter(Boolean)
-  return { bytes, warning: warnings.join(' ') || undefined }
+  return { bytes, warning: warnings.join(' ') || undefined, format: written }
 }
 
 export async function replaceRegion(

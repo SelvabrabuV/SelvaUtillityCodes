@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { formatJson, parseJson, parseStructuredText, treeToValue, valueToTree } from '../../src/core/json/document'
-import { applyMapping, arrayKeys, getPath, suggestMapping } from '../../src/core/mapping/map-records'
+import { structuredTextToCsv } from '../../src/core/conversion/structured'
+import { addChild, formatJson, parseJson, parseStructuredText, removeNode, renameKey, treeToValue, valueToTree } from '../../src/core/json/document'
+import { applyMapping, arrayKeys, getPath, suggestMapping, upsertTemplate, writeMappedCell } from '../../src/core/mapping/map-records'
 import { queryJsonPath, queryXPath } from '../../src/core/query/query'
 import { formatXml, jsonToXml, parseXml, xmlToJson } from '../../src/core/xml/document'
 import { rowsToXlsx } from '../../src/core/spreadsheet/excel'
@@ -103,5 +104,28 @@ describe('mapping', () => {
     expect(workbook.getWorksheet('Orders')?.getCell('C2').value).toBe('Laptop')
     expect(queryJsonPath(orders, '$.orders[*].id')).toEqual(['O001'])
     expect(() => queryJsonPath(orders, "$..[?(@.constructor.constructor('return 1')())]")).toThrow(/blocked/i)
+    const edited = writeMappedCell(orders, mapping, 1, 3, '9') as typeof orders
+    expect(edited.orders[0].items[1].quantity).toBe(9)
+    expect(edited.orders[0].items[0].quantity).toBe(1)
+    const templates = upsertTemplate([], 'Orders', mapping)
+    expect(templates[0].name).toBe('Orders')
+    expect(upsertTemplate(templates, 'Orders', mapping)).toHaveLength(1)
+    const csv = structuredTextToCsv(JSON.stringify(orders), { recordPath: '$.orders', expandPath: 'items', bom: false })
+    expect(csv.rowCount).toBe(2)
+    expect(csv.csv).toContain('Laptop')
+    expect(csv.csv).not.toContain('Mouse,Laptop')
+  })
+
+  it('adds, renames, and deletes tree nodes', () => {
+    const tree = valueToTree({ customer: 'Ada' })
+    const withCity = addChild(tree, tree.id, 'city', 'London')
+    expect(treeToValue(withCity)).toEqual({ customer: 'Ada', city: 'London' })
+    const city = withCity.children.find((node) => node.key === 'city')
+    expect(city).toBeTruthy()
+    const renamed = renameKey(withCity, city!.id, 'town')
+    expect(treeToValue(renamed)).toEqual({ customer: 'Ada', town: 'London' })
+    const removed = removeNode(renamed, city!.id)
+    expect(treeToValue(removed)).toEqual({ customer: 'Ada' })
+    expect(() => removeNode(tree, tree.id)).toThrow(/root/i)
   })
 })

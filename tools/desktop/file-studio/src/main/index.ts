@@ -16,8 +16,10 @@ import {
   openDirectory,
   openFiles,
   readBytes,
-  writeBytes
+  writeBytes,
+  writeInsideDirectory
 } from './services/files'
+import { assertFetchableUrl } from '@core/security/urls'
 import { runJob } from './services/jobs'
 import { loadState, recoveryDir, saveState } from './services/store'
 
@@ -76,6 +78,7 @@ function buildMenu(): Menu {
         { label: 'Open Folder…', click: () => send('open-folder') },
         { label: 'Save', accelerator: 'CmdOrCtrl+S', click: () => send('save') },
         { label: 'Save As…', accelerator: 'CmdOrCtrl+Shift+S', click: () => send('save-as') },
+        { label: 'Export…', click: () => send('export') },
         { type: 'separator' },
         { label: 'Close Tab', accelerator: 'CmdOrCtrl+W', click: () => send('close-tab') },
         { role: 'quit' }
@@ -86,6 +89,8 @@ function buildMenu(): Menu {
       submenu: [
         { label: 'Undo', accelerator: 'CmdOrCtrl+Z', click: () => send('undo') },
         { label: 'Redo', accelerator: 'CmdOrCtrl+Y', click: () => send('redo') },
+        { label: 'Find', accelerator: 'CmdOrCtrl+F', click: () => send('find') },
+        { type: 'separator' },
         { type: 'separator' },
         { role: 'cut' },
         { role: 'copy' },
@@ -97,9 +102,9 @@ function buildMenu(): Menu {
       label: 'View',
       submenu: [
         { label: 'Toggle Theme', click: () => send('theme') },
-        { role: 'resetZoom' },
-        { role: 'zoomIn' },
-        { role: 'zoomOut' },
+        { label: 'Zoom In', accelerator: 'CmdOrCtrl+Plus', click: () => send('zoom-in') },
+        { label: 'Zoom Out', accelerator: 'CmdOrCtrl+-', click: () => send('zoom-out') },
+        { label: 'Actual Size', accelerator: 'CmdOrCtrl+0', click: () => send('zoom-reset') },
         { type: 'separator' },
         { role: 'togglefullscreen' },
         { role: 'toggleDevTools' }
@@ -246,4 +251,52 @@ function registerIpc(): void {
     const directory = await recoveryDir()
     return allowDirectory(directory)
   })
+  ipcMain.handle('fs:recover', async (event, request: { name: string; bytes: Uint8Array }) => {
+    trusted(event)
+    const directory = allowDirectory(await recoveryDir())
+    const bytes = request.bytes instanceof Uint8Array ? request.bytes : Uint8Array.from(request.bytes ?? [])
+    return writeInsideDirectory(directory, String(request.name ?? ''), bytes)
+  })
+  ipcMain.handle('net:html', async (event, raw: string) => {
+    trusted(event)
+    const url = assertFetchableUrl(String(raw ?? ''))
+    const response = await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(12_000) })
+    assertFetchableUrl(response.url)
+    if (!response.ok) throw new Error(`The page returned ${response.status}.`)
+    const type = response.headers.get('content-type') ?? ''
+    if (type && !/html|xml|text\/plain/i.test(type)) throw new Error('That address did not return HTML.')
+    const html = await readHtmlBody(response)
+    const name = `${safePageName(url.hostname)}.html`
+    return { name, html }
+  })
+}
+
+async function readHtmlBody(response: Response): Promise<string> {
+  const reader = response.body?.getReader()
+  if (!reader) throw new Error('The page had no body.')
+  const chunks: Uint8Array[] = []
+  let total = 0
+  const limit = 2_000_000
+  while (true) {
+    const step = await reader.read()
+    if (step.done) break
+    total += step.value.byteLength
+    if (total > limit) {
+      await reader.cancel()
+      throw new Error('The page is larger than 2 MB. Save it and open the file instead.')
+    }
+    chunks.push(step.value)
+  }
+  const bytes = new Uint8Array(total)
+  let offset = 0
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return new TextDecoder('utf-8', { fatal: false }).decode(bytes)
+}
+
+function safePageName(host: string): string {
+  const cleaned = host.replace(/[^a-z0-9.-]+/gi, '-').replace(/^\.+/, '').slice(0, 60)
+  return cleaned || 'page'
 }

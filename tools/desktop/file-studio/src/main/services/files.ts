@@ -3,6 +3,7 @@ import { copyFile, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/
 import path from 'node:path'
 import { dialog, type BrowserWindow, type OpenDialogOptions } from 'electron'
 import { resolveOutputPath, type CollisionPolicy } from '@core/batch/paths'
+import { safeFileName } from '@core/security/names'
 import { isInsideDir } from '@core/security/paths'
 
 const files = new Set<string>()
@@ -95,6 +96,25 @@ export async function writeBytes(filePath: string, bytes: Uint8Array, overwrite:
     await rm(temporary, { force: true })
   }
   allowFile(resolved)
+}
+
+export async function writeInsideDirectory(directory: string, name: string, bytes: Uint8Array): Promise<string> {
+  if (bytes.byteLength > 12_000_000) throw new Error('That recovery copy is too large.')
+  const safe = safeFileName(name)
+  if (!safe.endsWith('.recovery.json')) throw new Error('Recovery names must end with .recovery.json.')
+  const root = allowDirectory(directory)
+  const target = path.resolve(root, safe)
+  if (!isInsideDir(root, target)) throw new Error('Recovery path was rejected.')
+  await mkdir(root, { recursive: true })
+  const temporary = `${target}.${process.pid}.tmp`
+  await writeFile(temporary, bytes)
+  try {
+    await rename(temporary, target)
+  } catch {
+    await writeFile(target, bytes)
+    await rm(temporary, { force: true })
+  }
+  return allowFile(target)
 }
 
 export async function confirm(window: BrowserWindow, message: string): Promise<boolean> {

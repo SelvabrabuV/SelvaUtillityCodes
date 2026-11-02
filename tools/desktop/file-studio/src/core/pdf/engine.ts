@@ -8,13 +8,18 @@ import {
   PDFRawStream,
   PDFRef,
   StandardFonts,
+  TextRenderingMode,
   decodePDFRawStream,
   degrees,
-  rgb
+  rgb,
+  setTextRenderingMode
 } from 'pdf-lib'
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs'
 import { EncryptedPdfError, errorMessage } from '../errors'
 import { pageDrawsImages, rewriteTextShows } from './content-stream'
+import type { PagePlacement } from './text-layer'
+
+export type { PagePlacement }
 
 export interface PdfPageInfo {
   width: number
@@ -35,6 +40,12 @@ export interface PdfRect {
   y: number
   width: number
   height: number
+}
+
+export async function createBlankPdf(width = 612, height = 792): Promise<Uint8Array> {
+  const doc = await PDFDocument.create()
+  doc.addPage([width, height])
+  return save(doc)
 }
 
 export async function inspectPdf(bytes: Uint8Array): Promise<PdfInfo> {
@@ -131,6 +142,29 @@ export async function setMetadata(
   return save(doc)
 }
 
+export async function addInvisibleTextLayer(bytes: Uint8Array, pageIndex: number, words: PagePlacement[]): Promise<Uint8Array> {
+  const doc = await loadPdf(bytes)
+  const page = doc.getPage(pageIndex)
+  const font = await doc.embedFont(StandardFonts.Helvetica)
+  // Rendering mode 3 keeps the text operators for search and copy without painting them.
+  page.pushOperators(setTextRenderingMode(TextRenderingMode.Invisible))
+  let placed = 0
+  for (const word of words) {
+    const text = word.text.trim()
+    if (!text) continue
+    const size = Math.max(6, Math.min(word.height * 0.85, 36))
+    try {
+      page.drawText(text, { x: word.x, y: Math.max(0, word.y), size, font, color: rgb(0, 0, 0) })
+      placed += 1
+    } catch {
+      // Standard Helvetica cannot encode every OCR glyph. Those words are skipped.
+    }
+  }
+  page.pushOperators(setTextRenderingMode(TextRenderingMode.Fill))
+  if (placed === 0) throw new Error('None of the recognized words could be written with the standard PDF font.')
+  return save(doc)
+}
+
 export async function addText(bytes: Uint8Array, pageIndex: number, text: string, rect: PdfRect, size = 16): Promise<Uint8Array> {
   const doc = await loadPdf(bytes)
   const page = doc.getPage(pageIndex)
@@ -220,6 +254,118 @@ export async function addInkAnnotation(bytes: Uint8Array, pageIndex: number, poi
     InkList: [flat],
     C: [0.1, 0.25, 0.7],
     Border: [0, 0, 1.5],
+    F: 4
+  })
+  pushAnnot(doc, pageIndex, annot)
+  return save(doc)
+}
+
+export async function addUnderlineAnnotation(bytes: Uint8Array, pageIndex: number, rect: PdfRect): Promise<Uint8Array> {
+  return addTextMarkup(bytes, pageIndex, rect, 'Underline', [0.15, 0.25, 0.75])
+}
+
+export async function addStrikeOutAnnotation(bytes: Uint8Array, pageIndex: number, rect: PdfRect): Promise<Uint8Array> {
+  return addTextMarkup(bytes, pageIndex, rect, 'StrikeOut', [0.75, 0.15, 0.15])
+}
+
+export async function addCircleAnnotation(bytes: Uint8Array, pageIndex: number, rect: PdfRect): Promise<Uint8Array> {
+  const doc = await loadPdf(bytes)
+  const annot = doc.context.obj({
+    Type: 'Annot',
+    Subtype: 'Circle',
+    Rect: [rect.x, rect.y, rect.x + rect.width, rect.y + rect.height],
+    C: [0.1, 0.45, 0.4],
+    Border: [0, 0, 1.5],
+    F: 4
+  })
+  pushAnnot(doc, pageIndex, annot)
+  return save(doc)
+}
+
+export async function addLineAnnotation(
+  bytes: Uint8Array,
+  pageIndex: number,
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  arrow = true
+): Promise<Uint8Array> {
+  const doc = await loadPdf(bytes)
+  const pad = 8
+  const annot = doc.context.obj({
+    Type: 'Annot',
+    Subtype: 'Line',
+    Rect: [Math.min(from.x, to.x) - pad, Math.min(from.y, to.y) - pad, Math.max(from.x, to.x) + pad, Math.max(from.y, to.y) + pad],
+    L: [from.x, from.y, to.x, to.y],
+    C: [0.12, 0.35, 0.62],
+    Border: [0, 0, 1.5],
+    F: 4
+  }) as PDFDict
+  if (arrow) annot.set(PDFName.of('LE'), doc.context.obj([PDFName.of('None'), PDFName.of('OpenArrow')]))
+  pushAnnot(doc, pageIndex, annot)
+  return save(doc)
+}
+
+export async function addStampAnnotation(
+  bytes: Uint8Array,
+  pageIndex: number,
+  rect: PdfRect,
+  name = 'Approved'
+): Promise<Uint8Array> {
+  const stamp = /^[A-Za-z]{3,20}$/.test(name) ? name : 'Approved'
+  const doc = await loadPdf(bytes)
+  const annot = doc.context.obj({
+    Type: 'Annot',
+    Subtype: 'Stamp',
+    Rect: [rect.x, rect.y, rect.x + rect.width, rect.y + rect.height],
+    Contents: PDFHexString.fromText(stamp),
+    C: [0.1, 0.5, 0.25],
+    F: 4
+  }) as PDFDict
+  annot.set(PDFName.of('Name'), PDFName.of(stamp))
+  pushAnnot(doc, pageIndex, annot)
+  return save(doc)
+}
+
+export async function addImage(
+  bytes: Uint8Array,
+  pageIndex: number,
+  image: Uint8Array,
+  rect: PdfRect
+): Promise<Uint8Array> {
+  const doc = await loadPdf(bytes)
+  const page = doc.getPage(pageIndex)
+  const embedded = image[0] === 0xff && image[1] === 0xd8 ? await doc.embedJpg(image) : await doc.embedPng(image)
+  page.drawImage(embedded, { x: rect.x, y: rect.y, width: rect.width, height: rect.height })
+  return save(doc)
+}
+
+export async function removeAnnotation(bytes: Uint8Array, pageIndex: number, index: number): Promise<Uint8Array> {
+  const doc = await loadPdf(bytes)
+  const page = doc.getPage(pageIndex)
+  const annots = page.node.lookup(PDFName.of('Annots'), PDFArray)
+  if (!annots || index < 0 || index >= annots.size()) throw new Error('That annotation is not on this page.')
+  annots.remove(index)
+  return save(doc)
+}
+
+async function addTextMarkup(
+  bytes: Uint8Array,
+  pageIndex: number,
+  rect: PdfRect,
+  subtype: 'Underline' | 'StrikeOut',
+  color: [number, number, number]
+): Promise<Uint8Array> {
+  const doc = await loadPdf(bytes)
+  const x1 = rect.x
+  const y1 = rect.y
+  const x2 = rect.x + rect.width
+  const y2 = rect.y + rect.height
+  const annot = doc.context.obj({
+    Type: 'Annot',
+    Subtype: subtype,
+    Rect: [x1, y1, x2, y2],
+    QuadPoints: [x1, y2, x2, y2, x1, y1, x2, y1],
+    C: color,
     F: 4
   })
   pushAnnot(doc, pageIndex, annot)

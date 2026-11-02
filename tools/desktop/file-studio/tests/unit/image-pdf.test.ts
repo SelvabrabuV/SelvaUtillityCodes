@@ -1,14 +1,22 @@
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import sharp from 'sharp'
 import { describe, expect, it } from 'vitest'
+import { clampCrop } from '../../src/core/image/adjustments'
 import { neutralAdjustments, readImageInfo, renderImage, replaceRegion } from '../../src/core/image/process'
 import { createProject, parseProject, stringifyProject } from '../../src/core/image/project'
 import {
+  addCircleAnnotation,
   addHighlightAnnotation,
+  addImage,
+  addLineAnnotation,
   addNoteAnnotation,
   addSquareAnnotation,
+  addStampAnnotation,
+  addStrikeOutAnnotation,
   addText,
+  addUnderlineAnnotation,
   annotationSubtypes,
+  createBlankPdf,
   deletePage,
   extractPdfText,
   fillForm,
@@ -17,6 +25,7 @@ import {
   mergePdfs,
   planRedaction,
   redactText,
+  removeAnnotation,
   replaceLiteralText,
   rotatePage,
   streamsContain
@@ -74,6 +83,15 @@ describe('images', () => {
     const reopened = parseProject(stringifyProject(project))
     expect(reopened.layers).toHaveLength(2)
     expect(reopened.source?.dataBase64).toBe(project.source?.dataBase64)
+    const cropped = await renderImage(source, { format: 'png', crop: { left: 2, top: 3, width: 10, height: 8 } })
+    const croppedInfo = await readImageInfo(cropped.bytes)
+    expect(croppedInfo.width).toBe(10)
+    expect(croppedInfo.height).toBe(8)
+    expect(clampCrop(30, 20, { left: -4, top: 0, width: 100, height: 100 })).toEqual({ left: 0, top: 0, width: 30, height: 20 })
+    const bmp = await renderImage(source, { format: 'bmp' })
+    expect(bmp.format).toBe('png')
+    expect(bmp.warning).toMatch(/PNG/)
+    expect(bmp.bytes.subarray(0, 4).toString('hex')).toBe('89504e47')
   })
 })
 
@@ -87,7 +105,17 @@ describe('pdf engine', () => {
     bytes = await addSquareAnnotation(bytes, 0, { x: 20, y: 20, width: 40, height: 20 })
     bytes = await addNoteAnnotation(bytes, 0, { x: 70, y: 20, width: 24, height: 24 }, 'Note')
     bytes = await addHighlightAnnotation(bytes, 0, { x: 40, y: 290, width: 120, height: 20 })
-    expect(await annotationSubtypes(bytes, 0)).toEqual(expect.arrayContaining(['Square', 'Text', 'Highlight']))
+    bytes = await addUnderlineAnnotation(bytes, 0, { x: 40, y: 250, width: 80, height: 16 })
+    bytes = await addStrikeOutAnnotation(bytes, 0, { x: 40, y: 220, width: 80, height: 16 })
+    bytes = await addCircleAnnotation(bytes, 0, { x: 200, y: 40, width: 50, height: 40 })
+    bytes = await addLineAnnotation(bytes, 0, { x: 20, y: 180 }, { x: 140, y: 180 }, true)
+    bytes = await addStampAnnotation(bytes, 0, { x: 220, y: 300, width: 90, height: 30 }, 'Approved')
+    const subtypes = await annotationSubtypes(bytes, 0)
+    expect(subtypes).toEqual(expect.arrayContaining(['Square', 'Text', 'Highlight', 'Underline', 'StrikeOut', 'Circle', 'Line', 'Stamp']))
+    bytes = await removeAnnotation(bytes, 0, subtypes.length - 1)
+    expect(await annotationSubtypes(bytes, 0)).toHaveLength(subtypes.length - 1)
+    const blank = await createBlankPdf()
+    expect((await inspectPdf(blank)).pageCount).toBe(1)
     const text = await extractPdfText(bytes)
     expect(text[1].text).toContain('Added')
     const merged = await mergePdfs([bytes, bytes])
@@ -135,5 +163,14 @@ describe('pdf engine', () => {
     const filled = await fillForm(bytes, { customer: 'Grace' })
     const fields = await listFormFields(filled)
     expect(fields.find((item) => item.name === 'customer')?.value).toBe('Grace')
+  })
+
+  it('embeds an image into page content and then blocks text redaction', async () => {
+    const bytes = await samplePdf()
+    const png = await sharp({ create: { width: 4, height: 4, channels: 3, background: { r: 1, g: 2, b: 3 } } }).png().toBuffer()
+    const withImage = await addImage(bytes, 1, png, { x: 20, y: 20, width: 16, height: 16 })
+    const plan = await planRedaction(withImage, 1, 'Added')
+    expect(plan.canApply).toBe(false)
+    expect(plan.mode).toBe('blocked')
   })
 })

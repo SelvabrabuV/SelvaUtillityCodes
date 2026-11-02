@@ -6,6 +6,7 @@ import {
   applyTsv,
   deleteColumn,
   findReplace,
+  matchingBodyRows,
   parseHtmlTables,
   setCellText,
   sortTable
@@ -98,6 +99,12 @@ describe('Excel and CSV round-trip', () => {
       ['A', 'B'],
       ['1', 'hello, world']
     ])
+  })
+
+  it('filters body rows without dropping the header', () => {
+    const table = parseHtmlTables('<table><tr><th>Name</th></tr><tr><td>Ada</td></tr><tr><td>Grace</td></tr></table>')[0]
+    expect(matchingBodyRows(table, 0, 'ada')).toEqual([1])
+    expect(matchingBodyRows(table, 0, '')).toEqual([1, 2])
   })
 
   it('refuses to combine tables with different headers', async () => {

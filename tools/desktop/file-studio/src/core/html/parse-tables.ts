@@ -162,6 +162,20 @@ export function renameHeader(table: ParsedTable, column: number, name: string): 
   return setCellText(table, 0, column, name)
 }
 
+/** Body-row indexes whose visible text contains the query. An empty query returns every body row. */
+export function matchingBodyRows(table: ParsedTable, column: number, query: string): number[] {
+  const needle = query.trim().toLocaleLowerCase()
+  const indexes: number[] = []
+  for (let index = table.headerRowCount; index < table.rows.length; index += 1) {
+    const cells = column >= 0 ? [table.rows[index]?.[column]] : table.rows[index]
+    const hit =
+      !needle ||
+      (cells ?? []).some((cell) => cell && !cell.covered && cell.text.toLocaleLowerCase().includes(needle))
+    if (hit) indexes.push(index)
+  }
+  return indexes
+}
+
 function parseOne(
   $: cheerio.CheerioAPI,
   tableEl: Element,

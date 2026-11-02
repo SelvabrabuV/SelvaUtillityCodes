@@ -1,9 +1,10 @@
-import { Canvas, FabricImage, IText, Line, PencilBrush, Rect, Triangle } from 'fabric'
+import { Canvas, Ellipse, FabricImage, IText, Line, PencilBrush, Rect, Triangle } from 'fabric'
 import { useEffect, useRef, useState } from 'react'
-import { neutralAdjustments, type ImageRenderOptions } from '@core/image/adjustments'
+import { clampCrop, neutralAdjustments, type ImageAdjustments, type ImageRenderOptions } from '@core/image/adjustments'
 import type { OcrWord } from '@core/image/ocr'
 import { Button } from '@renderer/components/ui'
 import { asBytes, base64ToBytes, bytesToBase64 } from '@renderer/lib/bytes'
+import { registerCommand } from '@renderer/lib/commands'
 import { exportBytes } from '@renderer/lib/session'
 import { activeTab, useWorkspace } from '@renderer/stores/workspace'
 import { toast } from 'sonner'
@@ -11,11 +12,18 @@ import { toast } from 'sonner'
 export function ImagePage() {
   const tab = useWorkspace(activeTab)
   const updateTab = useWorkspace((state) => state.updateTab)
+  const editTab = useWorkspace((state) => state.editTab)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const fabricRef = useRef<Canvas | null>(null)
   const historyRef = useRef<string[]>([])
+  const futureRef = useRef<string[]>([])
+  const undoRef = useRef<() => boolean>(() => false)
+  const redoRef = useRef<() => boolean>(() => false)
+  const exportRef = useRef<() => boolean>(() => false)
   const [words, setWords] = useState<OcrWord[]>([])
   const [preview, setPreview] = useState<string>('')
+  const [crop, setCrop] = useState({ left: 0, top: 0, width: 100, height: 100 })
+  const [resize, setResize] = useState({ width: 0, height: 0 })
 
   useEffect(() => {
     if (!canvasRef.current || !tab?.project) return
@@ -42,6 +50,31 @@ export function ImagePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab?.id])
 
+  useEffect(() => {
+    if (tab?.project) {
+      undoRef.current = undoCanvas
+      redoRef.current = () => redoCanvas()
+      exportRef.current = () => {
+        void exportImage()
+        return true
+      }
+    } else {
+      undoRef.current = () => false
+      redoRef.current = () => false
+      exportRef.current = () => false
+    }
+    const stopUndo = registerCommand('undo', () => undoRef.current())
+    const stopRedo = registerCommand('redo', () => redoRef.current())
+    const stopExport = registerCommand('export', () => exportRef.current())
+    return () => {
+      stopUndo()
+      stopRedo()
+      stopExport()
+    }
+    // The handlers close over the open project. The canvas history itself lives in refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab?.id, tab?.project])
+
   if (!tab || tab.module !== 'image' || !tab.project) {
     return <p className="p-8">Open a PNG, JPEG, WebP, BMP, TIFF, or GIF. Animated GIFs are opened as the first frame.</p>
   }
@@ -53,10 +86,12 @@ export function ImagePage() {
     <div className="grid h-full grid-cols-[1fr_280px] grid-rows-[auto_1fr]">
       <div className="col-span-2 flex flex-wrap gap-2 border-b border-[var(--color-line)] px-3 py-2">
         <Button onClick={() => setDraw('pen')}>Pen</Button>
+        <Button onClick={() => setDraw('brush')}>Brush</Button>
         <Button onClick={() => setDraw('eraser')}>Eraser</Button>
         <Button onClick={() => setDraw('select')}>Select</Button>
         <Button onClick={() => addText()}>Text</Button>
         <Button onClick={() => addShape()}>Rectangle</Button>
+        <Button onClick={() => addEllipse()}>Ellipse</Button>
         <Button onClick={() => addArrow()}>Arrow</Button>
         <Button onClick={() => void adjust({ rotate: 90 })}>Rotate</Button>
         <Button onClick={() => void adjust({ flipHorizontal: true })}>Flip</Button>
@@ -75,16 +110,8 @@ export function ImagePage() {
           Export
         </Button>
         <Button onClick={() => void runOcr()}>Detect text</Button>
-        <Button
-          onClick={() => {
-            const canvas = fabricRef.current
-            const previous = historyRef.current.pop()
-            if (!canvas || !previous) return
-            void canvas.loadFromJSON(JSON.parse(previous) as object).then(() => canvas.requestRenderAll())
-          }}
-        >
-          Undo
-        </Button>
+        <Button onClick={() => undoCanvas()}>Undo</Button>
+        <Button onClick={() => redoCanvas()}>Redo</Button>
       </div>
       <div className="studio-scroll overflow-auto bg-[#d9d3c7] p-6 dark:bg-[#111]">
         <canvas ref={canvasRef} />
@@ -114,12 +141,40 @@ export function ImagePage() {
             </li>
           ))}
         </ul>
-        <p className="mt-4 text-xs">Brightness {project.adjustments.brightness.toFixed(2)}. Edits stay in the project until you export.</p>
+        <label className="mt-4 block">
+          Brightness {project.adjustments.brightness.toFixed(2)}
+          <input className="w-full" type="range" min="0.2" max="2" step="0.05" value={project.adjustments.brightness} onChange={(event) => commitAdjustment({ brightness: Number(event.target.value) })} />
+        </label>
+        <label className="mt-2 block">
+          Contrast {project.adjustments.contrast.toFixed(2)}
+          <input className="w-full" type="range" min="0.2" max="2" step="0.05" value={project.adjustments.contrast} onChange={(event) => commitAdjustment({ contrast: Number(event.target.value) })} />
+        </label>
+        <label className="mt-2 block">
+          Saturation {project.adjustments.saturation.toFixed(2)}
+          <input className="w-full" type="range" min="0" max="2" step="0.05" value={project.adjustments.saturation} onChange={(event) => commitAdjustment({ saturation: Number(event.target.value) })} />
+        </label>
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <input className="rounded border px-1" type="number" value={crop.left} onChange={(event) => setCrop({ ...crop, left: Number(event.target.value) })} />
+          <input className="rounded border px-1" type="number" value={crop.top} onChange={(event) => setCrop({ ...crop, top: Number(event.target.value) })} />
+          <input className="rounded border px-1" type="number" value={crop.width} onChange={(event) => setCrop({ ...crop, width: Number(event.target.value) })} />
+          <input className="rounded border px-1" type="number" value={crop.height} onChange={(event) => setCrop({ ...crop, height: Number(event.target.value) })} />
+        </div>
+        <Button className="mt-2" onClick={() => void adjust({ crop: clampCrop(project.canvas.width, project.canvas.height, crop) })}>
+          Crop working copy
+        </Button>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <input className="rounded border px-1" type="number" placeholder="Width" value={resize.width || ''} onChange={(event) => setResize({ ...resize, width: Number(event.target.value) })} />
+          <input className="rounded border px-1" type="number" placeholder="Height" value={resize.height || ''} onChange={(event) => setResize({ ...resize, height: Number(event.target.value) })} />
+        </div>
+        <Button className="mt-2" onClick={() => void adjust({ resize: { width: resize.width || undefined, height: resize.height || undefined } })}>
+          Resize working copy
+        </Button>
+        <p className="mt-4 text-xs">Sliders stay in the project until export. Crop and resize replace the working pixels and do not overwrite the file you opened.</p>
       </aside>
     </div>
   )
 
-  function setDraw(mode: 'pen' | 'eraser' | 'select'): void {
+  function setDraw(mode: 'pen' | 'brush' | 'eraser' | 'select'): void {
     const canvas = fabricRef.current
     if (!canvas) return
     canvas.off('path:created')
@@ -130,7 +185,7 @@ export function ImagePage() {
     snapshot()
     canvas.isDrawingMode = true
     const brush = new PencilBrush(canvas)
-    brush.width = mode === 'eraser' ? 22 : 3
+    brush.width = mode === 'eraser' ? 22 : mode === 'brush' ? 14 : 3
     brush.color = '#102226'
     canvas.freeDrawingBrush = brush
     if (mode === 'eraser') {
@@ -141,13 +196,32 @@ export function ImagePage() {
         canvas.requestRenderAll()
       })
     }
-    rememberLayer('annotation', mode === 'eraser' ? 'Eraser' : 'Pen')
+    rememberLayer('annotation', mode === 'eraser' ? 'Eraser' : mode === 'brush' ? 'Brush' : 'Pen')
   }
 
   function snapshot(): void {
     const canvas = fabricRef.current
     if (!canvas) return
     historyRef.current.push(JSON.stringify(canvas.toJSON()))
+    futureRef.current = []
+  }
+
+  function undoCanvas(): boolean {
+    const canvas = fabricRef.current
+    const previous = historyRef.current.pop()
+    if (!canvas || !previous) return false
+    futureRef.current.push(JSON.stringify(canvas.toJSON()))
+    void canvas.loadFromJSON(JSON.parse(previous) as object).then(() => canvas.requestRenderAll())
+    return true
+  }
+
+  function redoCanvas(): boolean {
+    const canvas = fabricRef.current
+    const next = futureRef.current.pop()
+    if (!canvas || !next) return false
+    historyRef.current.push(JSON.stringify(canvas.toJSON()))
+    void canvas.loadFromJSON(JSON.parse(next) as object).then(() => canvas.requestRenderAll())
+    return true
   }
 
   function addText(): void {
@@ -165,6 +239,14 @@ export function ImagePage() {
     snapshot()
     canvas.add(new Rect({ left: 60, top: 80, width: 120, height: 70, fill: 'transparent', stroke: '#0f6e6b', strokeWidth: 3 }))
     rememberLayer('shape', 'Rectangle')
+  }
+
+  function addEllipse(): void {
+    const canvas = fabricRef.current
+    if (!canvas) return
+    snapshot()
+    canvas.add(new Ellipse({ left: 80, top: 100, rx: 70, ry: 40, fill: 'transparent', stroke: '#0f6e6b', strokeWidth: 3 }))
+    rememberLayer('shape', 'Ellipse')
   }
 
   function addArrow(): void {
@@ -192,30 +274,44 @@ export function ImagePage() {
       options: { format: 'png', adjustments: project.adjustments, ...options }
     })) as { bytes: Uint8Array; warning?: string }
     const bytes = asBytes(rendered.bytes)
-    updateTab(tab!.id, {
+    editTab(tab!.id, {
       dirty: true,
       validation: rendered.warning ?? 'Adjusted a working copy',
-      project: { ...project, source: { mime: 'image/png', dataBase64: bytesToBase64(bytes) } }
+      project: {
+        ...project,
+        canvas: { ...project.canvas, width: options.resize?.width || (options.crop ? options.crop.width : project.canvas.width), height: options.resize?.height || (options.crop ? options.crop.height : project.canvas.height) },
+        source: { mime: 'image/png', dataBase64: bytesToBase64(bytes) }
+      }
     })
     toast.message('The original file was not overwritten. Export when you want a new file.')
   }
 
-  async function runPreview(): Promise<void> {
-    const rendered = (await window.studio.runJob('image-render', {
+  function commitAdjustment(patch: Partial<ImageAdjustments>): void {
+    const current = useWorkspace.getState().tabs.find((item) => item.id === tab?.id)?.project
+    if (!current || !tab) return
+    editTab(tab.id, { dirty: true, project: { ...current, adjustments: { ...current.adjustments, ...patch } } })
+  }
+
+  async function renderOptions(): Promise<{ bytes: Uint8Array; warning?: string; format: string }> {
+    return (await window.studio.runJob('image-render', {
       bytes: sourceBytes(),
       options: { format: project.exportPrefs.format, quality: project.exportPrefs.quality, adjustments: project.adjustments ?? neutralAdjustments }
-    })) as { bytes: Uint8Array; warning?: string }
+    })) as { bytes: Uint8Array; warning?: string; format: string }
+  }
+
+  async function runPreview(): Promise<void> {
+    const rendered = await renderOptions()
     const bytes = asBytes(rendered.bytes)
-    setPreview(URL.createObjectURL(new Blob([Uint8Array.from(bytes)], { type: `image/${project.exportPrefs.format}` })))
+    const written = rendered.format || 'png'
+    setPreview(URL.createObjectURL(new Blob([Uint8Array.from(bytes)], { type: `image/${written}` })))
     if (rendered.warning) toast.message(rendered.warning)
   }
 
   async function exportImage(): Promise<void> {
-    const rendered = (await window.studio.runJob('image-render', {
-      bytes: sourceBytes(),
-      options: { format: project.exportPrefs.format, quality: project.exportPrefs.quality, adjustments: project.adjustments }
-    })) as { bytes: Uint8Array; warning?: string }
-    await exportBytes(`image.${project.exportPrefs.format === 'jpeg' ? 'jpg' : project.exportPrefs.format}`, asBytes(rendered.bytes))
+    const rendered = await renderOptions()
+    const written = rendered.format === 'jpeg' ? 'jpg' : rendered.format || 'png'
+    if (rendered.warning) toast.message(rendered.warning)
+    await exportBytes(`image.${written}`, asBytes(rendered.bytes))
   }
 
   async function runOcr(): Promise<void> {

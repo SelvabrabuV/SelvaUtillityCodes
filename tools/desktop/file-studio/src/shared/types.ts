@@ -3,6 +3,22 @@ export type CsvDelimiter = ',' | ';' | '\t'
 export type ImageFormat = 'png' | 'jpeg' | 'webp' | 'tiff' | 'bmp' | 'gif'
 export type DocKind = 'html' | 'structured' | 'image' | 'pdf' | 'project'
 
+export interface MappingColumn {
+  sourcePath: string
+  outputColumn: string
+  dataType: 'string' | 'number' | 'boolean' | 'date'
+  defaultValue: string
+  include: boolean
+}
+
+export interface MappingTemplate {
+  id: string
+  name: string
+  recordPath: string
+  expandPath: string | null
+  columns: MappingColumn[]
+}
+
 export interface AppSettings {
   theme: ThemeChoice
   exportFolder: string
@@ -20,6 +36,7 @@ export interface AppSettings {
   autosave: boolean
   uiDensity: 'comfortable' | 'compact'
   includeHiddenHtml: boolean
+  mappingTemplates: MappingTemplate[]
 }
 
 export const defaultSettings: AppSettings = {
@@ -38,7 +55,8 @@ export const defaultSettings: AppSettings = {
   pdfZoom: 'fit-width',
   autosave: true,
   uiDensity: 'comfortable',
-  includeHiddenHtml: false
+  includeHiddenHtml: false,
+  mappingTemplates: []
 }
 
 export interface RecentFile {

@@ -55,6 +55,17 @@ export function tablesToCsv(tables: ParsedTable[], options: CsvExportOptions = {
   })
 }
 
+export function matrixToCsv(headers: string[], rows: string[][], options: CsvExportOptions = {}): string {
+  const delimiter = options.delimiter ?? ','
+  const newline = options.newline ?? '\r\n'
+  const data = rows.map((row) => row.map((cell) => escapeFormulaText(cell)))
+  const contents = Papa.unparse(
+    { fields: headers.map((header) => escapeFormulaText(header)), data },
+    { delimiter, newline, header: options.includeHeaders !== false }
+  )
+  return options.bom === false ? contents : `\uFEFF${contents}`
+}
+
 export function parseCsv(text: string, delimiter: CsvDelimiter = ','): string[][] {
   const parsed = Papa.parse<string[]>(text.replace(/^\uFEFF/, ''), {
     delimiter,

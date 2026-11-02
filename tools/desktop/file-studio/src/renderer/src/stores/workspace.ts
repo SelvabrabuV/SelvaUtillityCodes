@@ -29,9 +29,14 @@ interface WorkspaceState {
   tabs: StudioTab[]
   activeId: string | null
   progress: string
+  past: StudioTab[][]
+  future: StudioTab[][]
   setModule: (module: ModuleId) => void
   openTab: (tab: StudioTab) => void
   updateTab: (id: string, patch: Partial<StudioTab>) => void
+  editTab: (id: string, patch: Partial<StudioTab>) => void
+  undo: () => void
+  redo: () => void
   closeTab: (id: string) => void
   activate: (id: string) => void
   moveTab: (id: string, direction: -1 | 1) => void
@@ -43,6 +48,8 @@ export const useWorkspace = create<WorkspaceState>((set) => ({
   tabs: [],
   activeId: null,
   progress: '',
+  past: [],
+  future: [],
   setModule: (module) => set({ module }),
   openTab: (tab) =>
     set((state) => ({
@@ -54,6 +61,40 @@ export const useWorkspace = create<WorkspaceState>((set) => ({
     set((state) => ({
       tabs: state.tabs.map((tab) => (tab.id === id ? { ...tab, ...patch } : tab))
     })),
+  editTab: (id, patch) =>
+    set((state) => ({
+      past: [...state.past, state.tabs].slice(-15),
+      future: [],
+      tabs: state.tabs.map((tab) => (tab.id === id ? { ...tab, ...patch } : tab))
+    })),
+  undo: () =>
+    set((state) => {
+      const previous = state.past.at(-1)
+      if (!previous) return state
+      const activeId = previous.some((tab) => tab.id === state.activeId) ? state.activeId : (previous.at(-1)?.id ?? null)
+      const active = previous.find((tab) => tab.id === activeId)
+      return {
+        past: state.past.slice(0, -1),
+        future: [...state.future, state.tabs].slice(-15),
+        tabs: previous,
+        activeId,
+        module: active?.module ?? state.module
+      }
+    }),
+  redo: () =>
+    set((state) => {
+      const next = state.future.at(-1)
+      if (!next) return state
+      const activeId = next.some((tab) => tab.id === state.activeId) ? state.activeId : (next.at(-1)?.id ?? null)
+      const active = next.find((tab) => tab.id === activeId)
+      return {
+        future: state.future.slice(0, -1),
+        past: [...state.past, state.tabs].slice(-15),
+        tabs: next,
+        activeId,
+        module: active?.module ?? state.module
+      }
+    }),
   closeTab: (id) =>
     set((state) => {
       const tabs = state.tabs.filter((tab) => tab.id !== id)

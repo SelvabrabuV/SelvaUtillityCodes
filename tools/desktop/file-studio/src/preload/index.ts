@@ -21,6 +21,8 @@ const api = {
   clipboardImage: (): Promise<Uint8Array | null> => ipcRenderer.invoke('clip:image'),
   runJob: (type: string, payload: Record<string, unknown>): Promise<unknown> => ipcRenderer.invoke('job:run', { type, payload }),
   recoveryDir: (): Promise<string> => ipcRenderer.invoke('recovery:dir'),
+  writeRecovery: (name: string, bytes: Uint8Array): Promise<string> => ipcRenderer.invoke('fs:recover', { name, bytes }),
+  fetchHtml: (url: string): Promise<{ name: string; html: string }> => ipcRenderer.invoke('net:html', url),
   pathForFile: (file: File): string => webUtils.getPathForFile(file),
   onCommand: (handler: (command: string) => void): (() => void) => {
     const listener = (_event: unknown, command: string): void => handler(command)

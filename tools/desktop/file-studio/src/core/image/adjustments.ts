@@ -28,3 +28,20 @@ export const neutralAdjustments: ImageAdjustments = {
   sharpen: 0,
   grayscale: false
 }
+
+export function clampCrop(
+  imageWidth: number,
+  imageHeight: number,
+  crop: { left: number; top: number; width: number; height: number }
+): { left: number; top: number; width: number; height: number } {
+  const width = Math.max(1, Math.floor(imageWidth))
+  const height = Math.max(1, Math.floor(imageHeight))
+  const left = Math.min(width - 1, Math.max(0, Math.floor(crop.left)))
+  const top = Math.min(height - 1, Math.max(0, Math.floor(crop.top)))
+  return {
+    left,
+    top,
+    width: Math.min(width - left, Math.max(1, Math.floor(crop.width))),
+    height: Math.min(height - top, Math.max(1, Math.floor(crop.height)))
+  }
+}

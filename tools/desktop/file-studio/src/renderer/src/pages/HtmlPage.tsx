@@ -1,10 +1,11 @@
 import Editor from '@monaco-editor/react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { tablesToCsv } from '@core/csv/csv'
-import { findReplace, parseHtmlTables, setCellText, sortTable, tableToMatrix } from '@core/html/parse-tables'
+import { deleteColumn, deleteRow, findReplace, matchingBodyRows, parseHtmlTables, renameHeader, setCellText, sortTable } from '@core/html/parse-tables'
 import { tablesToXlsx } from '@core/spreadsheet/excel'
 import { DataGrid } from '@renderer/components/DataGrid'
 import { Button, Modal } from '@renderer/components/ui'
+import { registerCommand } from '@renderer/lib/commands'
 import { exportBytes } from '@renderer/lib/session'
 import { useSettings } from '@renderer/stores/settings'
 import { activeTab, useWorkspace } from '@renderer/stores/workspace'
@@ -13,13 +14,46 @@ import { toast } from 'sonner'
 export function HtmlPage() {
   const tab = useWorkspace(activeTab)
   const updateTab = useWorkspace((state) => state.updateTab)
+  const editTab = useWorkspace((state) => state.editTab)
   const settings = useSettings((state) => state.settings)
   const [query, setQuery] = useState('')
   const [replace, setReplace] = useState('')
+  const [filter, setFilter] = useState('')
+  const [filterColumn, setFilterColumn] = useState(-1)
+  const [selected, setSelected] = useState<{ row: number; column: number } | null>(null)
   const [preview, setPreview] = useState<string[] | null>(null)
+  const findRef = useRef<HTMLInputElement>(null)
+  const replaceRef = useRef<HTMLInputElement>(null)
   const tables = tab?.tables ?? []
   const table = tables.find((item) => item.id === tab?.cursor) ?? tables[0]
-  const matrix = useMemo(() => (table ? tableToMatrix(table) : []), [table])
+  const bodyIndexes = useMemo(() => (table ? matchingBodyRows(table, filterColumn, filter) : []), [table, filterColumn, filter])
+  const rows = useMemo(
+    () => bodyIndexes.map((index) => table?.rows[index]?.map((cell) => (cell.covered ? '' : cell.text)) ?? []),
+    [bodyIndexes, table]
+  )
+
+  useEffect(() => {
+    const stopFind = registerCommand('find', () => {
+      if (!findRef.current) return false
+      findRef.current.focus()
+      return true
+    })
+    const stopReplace = registerCommand('replace', () => {
+      if (!replaceRef.current) return false
+      replaceRef.current.focus()
+      return true
+    })
+    const stopExport = registerCommand('export', () => {
+      if (!tab?.tables?.length) return false
+      void exportExcel(tab.id, tab.tables, tab.title)
+      return true
+    })
+    return () => {
+      stopFind()
+      stopReplace()
+      stopExport()
+    }
+  }, [tab?.id, tab?.tables, tab?.title])
 
   if (!tab || tab.module !== 'html') {
     return <EmptyHtml onPaste={(html) => openPasted(html)} />
@@ -40,20 +74,59 @@ export function HtmlPage() {
         </Button>
         <Button onClick={() => void exportExcel(tab.id, tab.tables ?? [], tab.title)}>Excel</Button>
         <Button onClick={() => void exportCsv(tab.tables ?? [], settings.csvDelimiter, settings.csvBom)}>CSV</Button>
-        <input className="rounded border px-2 py-1 text-sm" placeholder="Find" value={query} onChange={(event) => setQuery(event.target.value)} />
-        <input className="rounded border px-2 py-1 text-sm" placeholder="Replace" value={replace} onChange={(event) => setReplace(event.target.value)} />
+        <span className="self-center text-xs text-black/50">A filter hides rows here. Excel and CSV still export every row.</span>
+        <WebpageForm compact />
+        <input ref={findRef} className="rounded border px-2 py-1 text-sm" placeholder="Find" value={query} onChange={(event) => setQuery(event.target.value)} />
+        <input ref={replaceRef} className="rounded border px-2 py-1 text-sm" placeholder="Replace" value={replace} onChange={(event) => setReplace(event.target.value)} />
         <Button
           onClick={() => {
             if (!table) return
             const result = findReplace(table, query, replace)
-            updateTab(tab.id, { tables: tables.map((item) => (item.id === table.id ? result.table : item)), dirty: true })
+            editTab(tab.id, { tables: tables.map((item) => (item.id === table.id ? result.table : item)), dirty: true })
             toast.success(`${result.count} replacements`)
           }}
         >
           Replace
         </Button>
-        <Button onClick={() => table && updateTab(tab.id, { tables: tables.map((item) => (item.id === table.id ? sortTable(item, 0, 'asc') : item)), dirty: true })}>
-          Sort first column
+        <input className="rounded border px-2 py-1 text-sm" placeholder="Filter rows" value={filter} onChange={(event) => setFilter(event.target.value)} />
+        <select className="rounded border px-2 py-1 text-sm" value={filterColumn} onChange={(event) => setFilterColumn(Number(event.target.value))}>
+          <option value={-1}>Any column</option>
+          {(table?.rows[0] ?? []).map((cell, index) => (
+            <option key={index} value={index}>
+              {cell.text || `Column ${index + 1}`}
+            </option>
+          ))}
+        </select>
+        <Button onClick={() => table && editTab(tab.id, { tables: tables.map((item) => (item.id === table.id ? sortTable(item, selected?.column ?? 0, 'asc') : item)), dirty: true })}>
+          Sort column
+        </Button>
+        <Button
+          onClick={() => {
+            if (!table || selected == null) return
+            const row = bodyIndexes[selected.row]
+            if (row == null) return
+            editTab(tab.id, { tables: tables.map((item) => (item.id === table.id ? deleteRow(item, row) : item)), dirty: true })
+          }}
+        >
+          Delete row
+        </Button>
+        <Button
+          onClick={() => {
+            if (!table || selected == null) return
+            editTab(tab.id, { tables: tables.map((item) => (item.id === table.id ? deleteColumn(item, selected.column) : item)), dirty: true })
+          }}
+        >
+          Delete column
+        </Button>
+        <Button
+          onClick={() => {
+            if (!table || selected == null) return
+            const name = window.prompt('Header name', table.rows[0]?.[selected.column]?.text ?? '')
+            if (!name) return
+            editTab(tab.id, { tables: tables.map((item) => (item.id === table.id ? renameHeader(item, selected.column, name) : item)), dirty: true })
+          }}
+        >
+          Rename header
         </Button>
       </div>
       <aside className="studio-scroll overflow-auto border-r border-[var(--color-line)] p-2">
@@ -87,13 +160,15 @@ export function HtmlPage() {
           />
         )}
         <DataGrid
-          rows={matrix.slice(table?.headerRowCount ?? 0)}
+          rows={rows}
           headers={table && table.headerRowCount > 0 ? table.rows[0].map((cell) => cell.text) : undefined}
+          onSelect={(row, column) => setSelected({ row, column })}
           onEdit={(row, column, value) => {
             if (!table) return
-            const targetRow = row + table.headerRowCount
+            const targetRow = bodyIndexes[row]
+            if (targetRow == null) return
             const next = setCellText(table, targetRow, column, value)
-            updateTab(tab.id, { tables: tables.map((item) => (item.id === table.id ? next : item)), dirty: true })
+            editTab(tab.id, { tables: tables.map((item) => (item.id === table.id ? next : item)), dirty: true })
           }}
         />
       </div>
@@ -116,7 +191,7 @@ export function HtmlPage() {
 
 function EmptyHtml({ onPaste }: { onPaste: (html: string) => void }) {
   return (
-    <div className="grid h-full place-items-center">
+    <div className="grid h-full place-items-center overflow-auto py-8">
       <form
         className="w-[min(640px,90vw)]"
         onSubmit={(event) => {
@@ -131,8 +206,64 @@ function EmptyHtml({ onPaste }: { onPaste: (html: string) => void }) {
           Parse tables
         </Button>
       </form>
+      <WebpageForm />
     </div>
   )
+}
+
+function WebpageForm({ compact = false }: { compact?: boolean }) {
+  const [url, setUrl] = useState('')
+  const [busy, setBusy] = useState(false)
+  return (
+    <form
+      className={compact ? 'flex flex-wrap items-center gap-2' : 'mt-8 w-[min(640px,90vw)]'}
+      onSubmit={(event) => {
+        event.preventDefault()
+        setBusy(true)
+        void openWebpage(url).finally(() => setBusy(false))
+      }}
+    >
+      {!compact && (
+        <>
+          <h2 className="text-2xl font-semibold">Open a webpage</h2>
+          <p className="mt-2 text-sm text-black/65">
+            This downloads the address over the internet. Scripts on the page are not run. Local and private addresses are refused.
+          </p>
+        </>
+      )}
+      <input
+        className="rounded border px-2 py-1 text-sm"
+        placeholder="https://example.com/table"
+        value={url}
+        onChange={(event) => setUrl(event.target.value)}
+      />
+      <Button disabled={busy || url.trim() === ''} type="submit">
+        {busy ? 'Fetching' : 'Open webpage'}
+      </Button>
+      {compact && <span className="text-xs text-black/55">Uses the internet. Scripts are not run.</span>}
+    </form>
+  )
+}
+
+async function openWebpage(url: string): Promise<void> {
+  try {
+    const result = await window.studio.fetchHtml(url.trim())
+    const tables = parseHtmlTables(result.html, { includeHidden: useSettings.getState().settings.includeHiddenHtml })
+    useWorkspace.getState().openTab({
+      id: `html-${Date.now()}`,
+      module: 'html',
+      title: result.name,
+      dirty: true,
+      html: result.html,
+      tables,
+      size: result.html.length,
+      validation: `Fetched · ${tables.length} tables · scripts not run`,
+      cursor: tables[0]?.id ?? ''
+    })
+    toast.message('Opened the page from the internet. Scripts were not run.')
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : 'The page could not be fetched.')
+  }
 }
 
 function openPasted(html: string): void {
