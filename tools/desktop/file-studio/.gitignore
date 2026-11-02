@@ -1,0 +1,9 @@
+node_modules/
+out/
+release/
+dist/
+playwright-report/
+test-results/
+*.tsbuildinfo
+coverage/
+.eslintcache

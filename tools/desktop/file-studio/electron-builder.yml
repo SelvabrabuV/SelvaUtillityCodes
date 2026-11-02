@@ -1,0 +1,35 @@
+appId: com.selvautilitycodes.filestudio
+productName: File Studio
+copyright: Copyright © Selva
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**
+  - package.json
+asarUnpack:
+  - "**/*.node"
+  - "**/node_modules/sharp/**"
+  - "**/node_modules/@img/**"
+  - "**/node_modules/@tesseract.js-data/**"
+win:
+  target:
+    - nsis
+    - portable
+  icon: resources/icon.png
+  artifactName: ${productName}-${version}-${arch}.${ext}
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: File Studio
+  uninstallDisplayName: File Studio
+fileAssociations:
+  - ext: fstudio
+    name: FileStudio.Project
+    description: File Studio project
+    role: Editor
+portable:
+  artifactName: ${productName}-${version}-portable.${ext}

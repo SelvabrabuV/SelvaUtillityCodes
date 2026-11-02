@@ -1,0 +1,15 @@
+id: file-studio
+name: File Studio
+platform: desktop
+technologies:
+  - electron
+  - react
+  - typescript
+status: building
+summary: >
+  Offline Windows app for HTML tables, JSON/XML, images, and PDFs.
+entry: src/main/index.ts
+run: npm run dev
+requires:
+  - Windows 10 or 11
+  - Node.js 22 or newer for development

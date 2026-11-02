@@ -1,0 +1,49 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: 'Segoe UI', 'Helvetica Neue', sans-serif;
+  --color-ink: #1d2428;
+  --color-paper: #f3efe6;
+  --color-panel: #fffdf8;
+  --color-line: #ddd4c4;
+  --color-teal: #0f6e6b;
+  --color-teal-2: #14918c;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--color-paper);
+  color: var(--color-ink);
+}
+
+.dark body,
+html.dark body {
+  background: #1b1e22;
+  color: #ece7df;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.studio-scroll::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.studio-scroll::-webkit-scrollbar-thumb {
+  background: #c8bfb0;
+  border-radius: 99px;
+}
