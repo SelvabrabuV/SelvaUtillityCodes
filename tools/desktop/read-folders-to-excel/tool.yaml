@@ -1,0 +1,16 @@
+id: read-folders-to-excel
+name: Read Folders to Excel
+platform: desktop
+technologies:
+  - vbscript
+  - excel
+status: usable
+summary: >
+  Lists the files in each immediate subfolder of a chosen folder into an
+  Excel workbook, one sheet per subfolder. Skips file names that contain
+  -meta.xml.
+entry: src/ReadFoldersToExcel.vbs
+run: wscript src/ReadFoldersToExcel.vbs
+requires:
+  - Windows
+  - Microsoft Excel (desktop)

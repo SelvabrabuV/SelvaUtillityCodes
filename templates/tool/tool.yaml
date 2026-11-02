@@ -1,0 +1,11 @@
+id: <tool-id>
+name: <Display name>
+platform: desktop
+technologies:
+  - <language-or-framework>
+status: idea
+summary: <One or two sentences.>
+entry: src/<entry-file>
+run: <command, or none>
+# requires:
+#   - <runtime or app the machine must already have>

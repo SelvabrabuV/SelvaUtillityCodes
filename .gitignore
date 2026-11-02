@@ -1,0 +1,35 @@
+# OS and editors
+Thumbs.db
+Desktop.ini
+.DS_Store
+.vs/
+.idea/
+*.user
+*.suo
+
+# Secrets
+.env
+.env.*
+*.pfx
+*.p12
+
+# .NET / MSBuild
+bin/
+obj/
+
+# Node
+node_modules/
+dist/
+build/
+
+# Python
+__pycache__/
+.venv/
+venv/
+*.pyc
+
+# Flutter / Dart
+.dart_tool/
+
+# Local tool output
+FolderStructure.xlsx
