@@ -1,0 +1,34 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="DiffDesk.Desktop.App"
+             xmlns:vm="using:DiffDesk.Desktop.ViewModels"
+             xmlns:views="using:DiffDesk.Desktop.Views"
+             RequestedThemeVariant="Default">
+  <Application.Styles>
+    <FluentTheme />
+    <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml" />
+  </Application.Styles>
+  <Application.DataTemplates>
+    <DataTemplate DataType="vm:HomeViewModel">
+      <views:HomeView />
+    </DataTemplate>
+    <DataTemplate DataType="vm:FolderCompareViewModel">
+      <views:FolderCompareView />
+    </DataTemplate>
+    <DataTemplate DataType="vm:TextCompareViewModel">
+      <views:TextCompareView />
+    </DataTemplate>
+    <DataTemplate DataType="vm:MergeViewModel">
+      <views:MergeView />
+    </DataTemplate>
+    <DataTemplate DataType="vm:SyncViewModel">
+      <views:SyncView />
+    </DataTemplate>
+    <DataTemplate DataType="vm:FileCompareViewModel">
+      <views:FileCompareView />
+    </DataTemplate>
+    <DataTemplate DataType="vm:SettingsViewModel">
+      <views:SettingsView />
+    </DataTemplate>
+  </Application.DataTemplates>
+</Application>

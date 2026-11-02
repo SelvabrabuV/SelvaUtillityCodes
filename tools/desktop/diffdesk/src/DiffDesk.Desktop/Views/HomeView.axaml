@@ -1,0 +1,45 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DiffDesk.Desktop.ViewModels"
+             xmlns:domain="using:DiffDesk.Domain"
+             x:Class="DiffDesk.Desktop.Views.HomeView"
+             x:DataType="vm:HomeViewModel">
+  <Grid ColumnDefinitions="280,*" Margin="16">
+    <DockPanel>
+      <StackPanel DockPanel.Dock="Bottom" Spacing="8" Margin="0,12,12,0">
+        <Button Content="Open" Command="{Binding OpenCommand}" />
+        <Button Content="Duplicate" Command="{Binding DuplicateCommand}" />
+        <Button Content="Delete" Command="{Binding DeleteCommand}" />
+        <Button Content="Export" Command="{Binding ExportCommand}" />
+        <Button Content="Import" Command="{Binding ImportCommand}" />
+        <Button Content="Refresh" Command="{Binding RefreshCommand}" />
+      </StackPanel>
+      <ListBox ItemsSource="{Binding Sessions}" SelectedItem="{Binding SelectedSession}">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="domain:SessionRecord">
+            <StackPanel Margin="0,4">
+              <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+              <TextBlock Opacity="0.7" Text="{Binding ComparisonType}" />
+            </StackPanel>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </DockPanel>
+    <StackPanel Grid.Column="1" Spacing="10" Margin="8,0,0,0">
+      <TextBlock Text="Compare files and folders on this computer." FontSize="22" />
+      <TextBlock TextWrapping="Wrap" Opacity="0.8" Text="Pick a comparison. Sessions remember paths and options, not the contents of your files." />
+      <WrapPanel Orientation="Horizontal">
+        <Button Content="Folder comparison" Margin="0,0,8,8" Command="{Binding NewFolderCommand}" />
+        <Button Content="Text" Margin="0,0,8,8" Command="{Binding NewTextCommand}" />
+        <Button Content="Three-way merge" Margin="0,0,8,8" Command="{Binding NewMergeCommand}" />
+        <Button Content="Folder sync" Margin="0,0,8,8" Command="{Binding NewSyncCommand}" />
+        <Button Content="Images" Margin="0,0,8,8" Command="{Binding NewImageCommand}" />
+        <Button Content="CSV or Excel" Margin="0,0,8,8" Command="{Binding NewTableCommand}" />
+        <Button Content="Binary" Margin="0,0,8,8" Command="{Binding NewBinaryCommand}" />
+        <Button Content="JSON" Margin="0,0,8,8" Command="{Binding NewJsonCommand}" />
+        <Button Content="XML" Margin="0,0,8,8" Command="{Binding NewXmlCommand}" />
+        <Button Content="PDF or Word" Margin="0,0,8,8" Command="{Binding NewDocumentCommand}" />
+      </WrapPanel>
+    </StackPanel>
+  </Grid>
+</UserControl>

@@ -1,0 +1,15 @@
+id: diffdesk
+name: DiffDesk
+platform: desktop
+technologies:
+  - csharp
+  - dotnet
+  - avalonia
+status: usable
+summary: >
+  Offline Windows app to compare folders and files, merge text, and sync with a preview.
+entry: src/DiffDesk.Desktop/Program.cs
+run: dotnet run --project src/DiffDesk.Desktop
+requires:
+  - Windows 10 or 11
+  - .NET SDK 10 to build

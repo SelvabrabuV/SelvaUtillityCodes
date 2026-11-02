@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/DiffDesk.Application/DiffDesk.Application.csproj" />
+    <Project Path="src/DiffDesk.Cli/DiffDesk.Cli.csproj" />
+    <Project Path="src/DiffDesk.Comparison/DiffDesk.Comparison.csproj" />
+    <Project Path="src/DiffDesk.Desktop/DiffDesk.Desktop.csproj" />
+    <Project Path="src/DiffDesk.Domain/DiffDesk.Domain.csproj" />
+    <Project Path="src/DiffDesk.Infrastructure/DiffDesk.Infrastructure.csproj" />
+    <Project Path="src/DiffDesk.Sync/DiffDesk.Sync.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/DiffDesk.IntegrationTests/DiffDesk.IntegrationTests.csproj" />
+    <Project Path="tests/DiffDesk.UnitTests/DiffDesk.UnitTests.csproj" />
+  </Folder>
+</Solution>

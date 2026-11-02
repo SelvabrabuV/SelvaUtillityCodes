@@ -1,0 +1,75 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DiffDesk.Desktop.ViewModels"
+             xmlns:domain="using:DiffDesk.Domain"
+             x:Class="DiffDesk.Desktop.Views.FileCompareView"
+             x:DataType="vm:FileCompareViewModel">
+  <DockPanel Margin="12">
+    <StackPanel DockPanel.Dock="Top" Spacing="8">
+      <Grid ColumnDefinitions="Auto,*,Auto,Auto,*,Auto" ColumnSpacing="8">
+        <TextBlock Text="Left" VerticalAlignment="Center" />
+        <TextBox Grid.Column="1" Text="{Binding LeftPath}" />
+        <Button Grid.Column="2" Content="Browse" Command="{Binding BrowseLeftCommand}" />
+        <TextBlock Grid.Column="3" Text="Right" VerticalAlignment="Center" />
+        <TextBox Grid.Column="4" Text="{Binding RightPath}" />
+        <Button Grid.Column="5" Content="Browse" Command="{Binding BrowseRightCommand}" />
+      </Grid>
+      <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding ShowTable}">
+        <TextBox Width="220" PlaceholderText="Key columns, comma separated" Text="{Binding KeyColumns}" />
+        <CheckBox Content="Ignore row order" IsChecked="{Binding IgnoreRowOrder}" />
+        <Button Content="Export CSV" Command="{Binding ExportCommand}" />
+      </StackPanel>
+      <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding ShowBinary}">
+        <TextBox Width="120" Text="{Binding OffsetText}" />
+        <Button Content="Hex window" Command="{Binding LoadWindowCommand}" />
+      </StackPanel>
+      <Button Content="Compare" Command="{Binding CompareCommand}" HorizontalAlignment="Left" />
+      <TextBlock Text="{Binding Banner}" TextWrapping="Wrap" />
+      <TextBlock Text="{Binding Status}" TextWrapping="Wrap" />
+    </StackPanel>
+    <Grid>
+      <DataGrid IsVisible="{Binding ShowTable}" ItemsSource="{Binding TableDiffs}" AutoGenerateColumns="False" IsReadOnly="True">
+        <DataGrid.Columns>
+          <DataGridTextColumn Header="Kind" Binding="{Binding Kind}" Width="*" />
+          <DataGridTextColumn Header="Key" Binding="{Binding Key}" Width="*" />
+          <DataGridTextColumn Header="Column" Binding="{Binding Column}" Width="*" />
+          <DataGridTextColumn Header="Left" Binding="{Binding LeftValue}" Width="2*" />
+          <DataGridTextColumn Header="Right" Binding="{Binding RightValue}" Width="2*" />
+        </DataGrid.Columns>
+      </DataGrid>
+      <Grid IsVisible="{Binding ShowImage}" ColumnDefinitions="*,*,*">
+        <Image Source="{Binding LeftImage}" Stretch="Uniform" />
+        <Image Grid.Column="1" Source="{Binding RightImage}" Stretch="Uniform" />
+        <Image Grid.Column="2" Source="{Binding Heatmap}" Stretch="Uniform" />
+      </Grid>
+      <Grid IsVisible="{Binding ShowBinary}" RowDefinitions="*,*" ColumnDefinitions="*,*">
+        <DataGrid Grid.ColumnSpan="2" ItemsSource="{Binding Regions}" AutoGenerateColumns="False" IsReadOnly="True">
+          <DataGrid.Columns>
+            <DataGridTextColumn Header="Offset" Binding="{Binding Offset}" Width="*" />
+            <DataGridTextColumn Header="Length" Binding="{Binding Length}" Width="*" />
+          </DataGrid.Columns>
+        </DataGrid>
+        <TextBox Grid.Row="1" Text="{Binding LeftHex}" IsReadOnly="True" AcceptsReturn="True" FontFamily="Consolas,monospace" />
+        <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding RightHex}" IsReadOnly="True" AcceptsReturn="True" FontFamily="Consolas,monospace" />
+      </Grid>
+      <DataGrid IsVisible="{Binding ShowStructured}" ItemsSource="{Binding StructuredDiffs}" AutoGenerateColumns="False" IsReadOnly="True">
+        <DataGrid.Columns>
+          <DataGridTextColumn Header="Path" Binding="{Binding Path}" Width="2*" />
+          <DataGridTextColumn Header="Kind" Binding="{Binding Kind}" Width="*" />
+          <DataGridTextColumn Header="Left" Binding="{Binding LeftValue}" Width="2*" />
+          <DataGridTextColumn Header="Right" Binding="{Binding RightValue}" Width="2*" />
+        </DataGrid.Columns>
+      </DataGrid>
+      <DockPanel IsVisible="{Binding ShowDocument}">
+        <TextBlock DockPanel.Dock="Top" Text="{Binding Rendered}" TextWrapping="Wrap" Margin="0,0,0,8" />
+        <DataGrid ItemsSource="{Binding Hunks}" AutoGenerateColumns="False" IsReadOnly="True">
+          <DataGrid.Columns>
+            <DataGridTextColumn Header="Left line" Binding="{Binding LeftStart}" Width="*" />
+            <DataGridTextColumn Header="Left" Binding="{Binding LeftPreview}" Width="2*" />
+            <DataGridTextColumn Header="Right" Binding="{Binding RightPreview}" Width="2*" />
+          </DataGrid.Columns>
+        </DataGrid>
+      </DockPanel>
+    </Grid>
+  </DockPanel>
+</UserControl>

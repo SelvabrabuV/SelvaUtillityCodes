@@ -1,0 +1,45 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DiffDesk.Desktop.ViewModels"
+             x:Class="DiffDesk.Desktop.Views.SyncView"
+             x:DataType="vm:SyncViewModel">
+  <DockPanel Margin="12">
+    <StackPanel DockPanel.Dock="Top" Spacing="8">
+      <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+        <TextBlock Text="Left" VerticalAlignment="Center" />
+        <TextBox Grid.Column="1" Text="{Binding LeftPath}" />
+        <Button Grid.Column="2" Content="Browse" Command="{Binding BrowseLeftCommand}" />
+      </Grid>
+      <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+        <TextBlock Text="Right" VerticalAlignment="Center" />
+        <TextBox Grid.Column="1" Text="{Binding RightPath}" />
+        <Button Grid.Column="2" Content="Browse" Command="{Binding BrowseRightCommand}" />
+      </Grid>
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <ComboBox Width="240" ItemsSource="{Binding Modes}" SelectedItem="{Binding SelectedMode}">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:ModeChoice">
+              <TextBlock Text="{Binding Label}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+        <Button Content="Preview" Command="{Binding PreviewCommand}" />
+        <Button Content="Execute" Command="{Binding ExecuteCommand}" />
+        <Button Content="Undo last run" Command="{Binding UndoCommand}" />
+        <Button Content="Use left" Command="{Binding UseLeftCommand}" />
+        <Button Content="Use right" Command="{Binding UseRightCommand}" />
+        <Button Content="Skip" Command="{Binding SkipCommand}" />
+      </StackPanel>
+      <TextBlock Text="{Binding Status}" TextWrapping="Wrap" />
+    </StackPanel>
+    <DataGrid ItemsSource="{Binding Rows}" SelectedItem="{Binding SelectedRow}" AutoGenerateColumns="False">
+      <DataGrid.Columns>
+        <DataGridCheckBoxColumn Header="Apply" Binding="{Binding Selected}" />
+        <DataGridTextColumn Header="Action" Binding="{Binding ActionText}" IsReadOnly="True" Width="*" />
+        <DataGridTextColumn Header="Direction" Binding="{Binding DirectionText}" IsReadOnly="True" Width="*" />
+        <DataGridTextColumn Header="Path" Binding="{Binding RelativePath}" IsReadOnly="True" Width="2*" />
+        <DataGridTextColumn Header="Detail" Binding="{Binding Detail}" IsReadOnly="True" Width="2*" />
+      </DataGrid.Columns>
+    </DataGrid>
+  </DockPanel>
+</UserControl>

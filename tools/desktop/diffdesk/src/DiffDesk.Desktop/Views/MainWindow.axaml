@@ -1,0 +1,69 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:DiffDesk.Desktop.ViewModels"
+        x:Class="DiffDesk.Desktop.Views.MainWindow"
+        x:DataType="vm:ShellViewModel"
+        Title="DiffDesk"
+        Width="1180"
+        Height="760"
+        MinWidth="880"
+        MinHeight="560"
+        WindowStartupLocation="CenterScreen">
+  <Window.KeyBindings>
+    <KeyBinding Gesture="Ctrl+O" Command="{Binding OpenActiveCommand}" />
+    <KeyBinding Gesture="Ctrl+S" Command="{Binding SaveActiveCommand}" />
+    <KeyBinding Gesture="F5" Command="{Binding CompareActiveCommand}" />
+    <KeyBinding Gesture="Ctrl+Tab" Command="{Binding NextTabCommand}" />
+  </Window.KeyBindings>
+  <DockPanel>
+    <Border DockPanel.Dock="Top" Padding="12,8">
+      <Grid ColumnDefinitions="*,Auto">
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <TextBlock Text="DiffDesk" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,12,0" />
+          <Menu>
+            <MenuItem Header="New">
+              <MenuItem Header="Folder comparison" Command="{Binding NewFolderCommand}" />
+              <MenuItem Header="Text" Command="{Binding NewTextCommand}" />
+              <MenuItem Header="Three-way merge" Command="{Binding NewMergeCommand}" />
+              <MenuItem Header="Folder sync" Command="{Binding NewSyncCommand}" />
+              <MenuItem Header="Images" Command="{Binding NewImageCommand}" />
+              <MenuItem Header="CSV or Excel" Command="{Binding NewTableCommand}" />
+              <MenuItem Header="Binary" Command="{Binding NewBinaryCommand}" />
+              <MenuItem Header="JSON" Command="{Binding NewJsonCommand}" />
+              <MenuItem Header="XML" Command="{Binding NewXmlCommand}" />
+              <MenuItem Header="PDF or Word" Command="{Binding NewDocumentCommand}" />
+            </MenuItem>
+            <MenuItem Header="View">
+              <MenuItem Header="System theme" Command="{Binding SetThemeCommand}" CommandParameter="System" />
+              <MenuItem Header="Light" Command="{Binding SetThemeCommand}" CommandParameter="Light" />
+              <MenuItem Header="Dark" Command="{Binding SetThemeCommand}" CommandParameter="Dark" />
+              <MenuItem Header="Settings" Command="{Binding NewSettingsCommand}" />
+            </MenuItem>
+          </Menu>
+          <Button Content="Compare" Command="{Binding CompareActiveCommand}" />
+          <Button Content="Save" Command="{Binding SaveActiveCommand}" />
+          <Button Content="Save session" Command="{Binding SaveSessionCommand}" />
+        </StackPanel>
+        <TextBlock Grid.Column="1" Text="{Binding Status}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="420" />
+      </Grid>
+    </Border>
+    <Border DockPanel.Dock="Bottom" Padding="12,6">
+      <TextBlock Opacity="0.75" Text="Offline. Sync shows a preview before it writes, and deletes wait for confirmation." />
+    </Border>
+    <TabControl ItemsSource="{Binding Tabs}" SelectedItem="{Binding Selected}">
+      <TabControl.ItemTemplate>
+        <DataTemplate x:DataType="vm:WorkspaceTab">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Text="{Binding Title}" VerticalAlignment="Center" />
+            <Button Content="×" Command="{Binding RequestClose}" IsVisible="{Binding CanClose}" Padding="6,0" />
+          </StackPanel>
+        </DataTemplate>
+      </TabControl.ItemTemplate>
+      <TabControl.ContentTemplate>
+        <DataTemplate>
+          <ContentControl Content="{Binding}" x:CompileBindings="False" />
+        </DataTemplate>
+      </TabControl.ContentTemplate>
+    </TabControl>
+  </DockPanel>
+</Window>

@@ -10,6 +10,7 @@ Agents (Grok, Claude, Codex) follow [AGENTS.md](AGENTS.md).
 | --- | --- | --- | --- | --- |
 | Read Folders to Excel | desktop | VBScript, Excel | usable | [tools/desktop/read-folders-to-excel](tools/desktop/read-folders-to-excel) |
 | File Studio | desktop | Electron, React, TypeScript | building | [tools/desktop/file-studio](tools/desktop/file-studio) |
+| DiffDesk | desktop | C#, .NET 10, Avalonia | usable | [tools/desktop/diffdesk](tools/desktop/diffdesk) |
 
 ## Layout
 

@@ -33,3 +33,4 @@ venv/
 
 # Local tool output
 FolderStructure.xlsx
+artifacts/

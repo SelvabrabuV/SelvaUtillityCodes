@@ -1,0 +1,47 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DiffDesk.Desktop.ViewModels"
+             xmlns:domain="using:DiffDesk.Domain"
+             x:Class="DiffDesk.Desktop.Views.FolderCompareView"
+             x:DataType="vm:FolderCompareViewModel">
+  <DockPanel Margin="12">
+    <StackPanel DockPanel.Dock="Top" Spacing="8">
+      <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+        <TextBlock Text="Left" VerticalAlignment="Center" />
+        <TextBox Grid.Column="1" Text="{Binding LeftPath}" />
+        <Button Grid.Column="2" Content="Browse" Command="{Binding BrowseLeftCommand}" />
+      </Grid>
+      <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+        <TextBlock Text="Right" VerticalAlignment="Center" />
+        <TextBox Grid.Column="1" Text="{Binding RightPath}" />
+        <Button Grid.Column="2" Content="Browse" Command="{Binding BrowseRightCommand}" />
+      </Grid>
+      <WrapPanel Orientation="Horizontal">
+        <CheckBox Content="Size" IsChecked="{Binding CompareSize}" Margin="0,0,12,4" />
+        <CheckBox Content="Timestamp" IsChecked="{Binding CompareTimestamp}" Margin="0,0,12,4" />
+        <CheckBox Content="Content" IsChecked="{Binding CompareContent}" Margin="0,0,12,4" />
+        <CheckBox Content="Hash" IsChecked="{Binding CompareHash}" Margin="0,0,12,4" />
+        <CheckBox Content="Text rules" IsChecked="{Binding TextAware}" Margin="0,0,12,4" />
+        <CheckBox Content="Differences only" IsChecked="{Binding DifferencesOnly}" Margin="0,0,12,4" />
+        <CheckBox Content="Skip build folders" IsChecked="{Binding UseBuildExcludes}" Margin="0,0,12,4" />
+      </WrapPanel>
+      <TextBox PlaceholderText="Exclude globs, one per line" Text="{Binding ExcludeText}" AcceptsReturn="True" Height="52" />
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <Button Content="Compare" Command="{Binding CompareCommand}" />
+        <Button Content="Save HTML report" Command="{Binding SaveReportCommand}" />
+      </StackPanel>
+      <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" />
+      <TextBlock Text="{Binding Status}" TextWrapping="Wrap" Opacity="0.8" />
+    </StackPanel>
+    <DataGrid x:Name="Grid" ItemsSource="{Binding Entries}" AutoGenerateColumns="False" IsReadOnly="True" DoubleTapped="RowDoubleTapped">
+      <DataGrid.Columns>
+        <DataGridTextColumn Header="Path" Binding="{Binding RelativePath}" Width="2*" />
+        <DataGridTextColumn Header="Kind" Binding="{Binding Kind}" Width="*" />
+        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="*" />
+        <DataGridTextColumn Header="Left bytes" Binding="{Binding LeftLength}" Width="*" />
+        <DataGridTextColumn Header="Right bytes" Binding="{Binding RightLength}" Width="*" />
+        <DataGridTextColumn Header="Detail" Binding="{Binding Detail}" Width="2*" />
+      </DataGrid.Columns>
+    </DataGrid>
+  </DockPanel>
+</UserControl>
